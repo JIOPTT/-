@@ -1,0 +1,132 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+// --- 定義參數 ---
+#define NX 51     // x方向網格點數 (包含邊界)
+#define NY 51     // y方向網格點數 (包含邊界)
+#define MAX_ITER 10000 // 最大迭代次數
+#define TOLERANCE 1.0e-5 // 收斂容忍度
+
+// --- 全域變數 ---
+double T[NX][NY];      // 溫度矩陣 (當前時間步)
+double T_new[NX][NY];  // 溫度矩陣 (新時間步)
+
+// --- 函式：初始化邊界條件與初始場 ---
+void initialize() {
+    int i, j;
+    // 內場初始化為 0
+    for (i = 0; i < NX; i++) {
+        for (j = 0; j < NY; j++) {
+            T[i][j] = 0.0;
+        }
+    }
+
+    // 設置邊界條件 (Dirichlet Boundary Conditions)
+    // 假設域為 1x1 單位正方形
+    
+    // 底邊 (y=0, j=0) 溫度設為 100
+    for (i = 0; i < NX; i++) {
+        T[i][0] = 100.0;
+    }
+    
+    // 頂邊 (y=1, j=NY-1) 溫度設為 0
+    for (i = 0; i < NX; i++) {
+        T[i][NY - 1] = 0.0;
+    }
+    
+    // 左邊 (x=0, i=0) 溫度設為 50
+    for (j = 0; j < NY; j++) {
+        T[0][j] = 50.0;
+    }
+    
+    // 右邊 (x=1, i=NX-1) 溫度設為 50
+    for (j = 0; j < NY; j++) {
+        T[NX - 1][j] = 50.0;
+    }
+
+    // 將 T_new 複製成初始的 T
+    for (i = 0; i < NX; i++) {
+        for (j = 0; j < NY; j++) {
+            T_new[i][j] = T[i][j];
+        }
+    }
+}
+
+// --- 函式：執行一次 Jacobi 迭代 ---
+// 拉普拉斯方程式的有限差分形式 (Laplace FDM):
+// T(i, j) = 0.25 * [T(i+1, j) + T(i-1, j) + T(i, j+1) + T(i, j-1)]
+double jacobi_iteration() {
+    int i, j;
+    double max_diff = 0.0; // 用於追蹤最大殘差
+    
+    // 內點計算 (不包含邊界 i=0, i=NX-1, j=0, j=NY-1)
+    for (i = 1; i < NX - 1; i++) {
+        for (j = 1; j < NY - 1; j++) {
+            // 計算新溫度
+            T_new[i][j] = 0.25 * (T[i + 1][j] + T[i - 1][j] + T[i][j + 1] + T[i][j - 1]);
+            
+            // 計算殘差 (Residual)
+            double diff = fabs(T_new[i][j] - T[i][j]);
+            if (diff > max_diff) {
+                max_diff = diff;
+            }
+        }
+    }
+    
+    // 更新溫度場 (將 T_new 複製回 T，準備下一次迭代)
+    for (i = 1; i < NX - 1; i++) {
+        for (j = 1; j < NY - 1; j++) {
+            T[i][j] = T_new[i][j];
+        }
+    }
+    
+    return max_diff;
+}
+
+// --- 主程式 ---
+int main() {
+    int iter = 0;
+    double max_residual = 0.0;
+
+    initialize();
+    
+    printf("開始求解二維熱傳導...\n");
+    
+    // 迭代循環
+    do {
+        max_residual = jacobi_iteration();
+        iter++;
+        
+        if (iter % 1000 == 0) {
+            printf("迭代次數: %d, 最大殘差: %e\n", iter, max_residual);
+        }
+        
+    } while (max_residual > TOLERANCE && iter < MAX_ITER);
+
+    if (max_residual <= TOLERANCE) {
+        printf("\n✅ 成功收斂！\n");
+        printf("總迭代次數: %d, 最終殘差: %e\n", iter, max_residual);
+    } else {
+        printf("\n⚠️ 未能收斂到目標容忍度。\n");
+    }
+
+    // --- 結果輸出 (輸出到文件，可用於 Gnuplot 或 Excel 繪圖) ---
+    FILE *fp = fopen("temperature_output.csv", "w");
+    if (fp == NULL) {
+        perror("無法打開文件");
+        return 1;
+    }
+
+    fprintf(fp, "X,Y,Temperature\n");
+    for (i = 0; i < NX; i++) {
+        for (j = 0; j < NY; j++) {
+            // 假設網格大小為 dx=dy=1/(NX-1)
+            fprintf(fp, "%f,%f,%f\n", (double)i / (NX - 1), (double)j / (NY - 1), T[i][j]);
+        }
+    }
+    fclose(fp);
+    printf("結果已輸出至 temperature_output.csv。\n");
+
+    return 0;
+}
